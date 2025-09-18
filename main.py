@@ -5,7 +5,8 @@ from flask import Flask
 from threading import Thread
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.helpers import escape_markdown
 from telegram.constants import ChatMemberStatus
 
 # Load environment variables
@@ -31,6 +32,9 @@ WARNING_IMAGE_URL = os.getenv('WARNING_IMAGE_URL')
 # User counter (in production, use a database)
 user_count = 0
 
+# Search states for users (keyed by (chat_id, user_id) tuple)
+user_search_states = {}
+
 class TelegramBot:
     def __init__(self):
         if not BOT_TOKEN:
@@ -43,6 +47,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(CommandHandler("check_subscription", self.check_subscription))
         self.application.add_handler(CallbackQueryHandler(self.button_handler))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_text_message))
     
     async def is_subscribed(self, context, user_id):
         """Check if user is subscribed to the required channel"""
@@ -148,7 +153,8 @@ class TelegramBot:
         keyboard = [
             [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
             [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
-            [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")]
+            [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")],
+            [InlineKeyboardButton("🔍 Izlash", callback_data="search_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -181,7 +187,8 @@ class TelegramBot:
                     keyboard = [
                         [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
                         [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
-                        [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")]
+                        [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")],
+                        [InlineKeyboardButton("🔍 Izlash", callback_data="search_menu")]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
@@ -245,12 +252,177 @@ class TelegramBot:
                         )
                 else:
                     await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+                    
+            elif query.data == "search_menu":
+                if await self.is_subscribed(context, user_id):
+                    await self.show_search_menu(query)
+                else:
+                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+                    
+            elif query.data == "search_channel":
+                if await self.is_subscribed(context, user_id):
+                    chat_id = query.message.chat.id if query.message else None
+                    user_search_states[(chat_id, user_id)] = "waiting_channel_search"
+                    text = "🔍 **Kanal qidirish**\n\nKanal username'ini kiriting (masalan: @channelname yoki channelname):"
+                    if query.message:
+                        await query.edit_message_text(text, parse_mode='Markdown')
+                else:
+                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+                    
+            elif query.data == "search_group":
+                if await self.is_subscribed(context, user_id):
+                    chat_id = query.message.chat.id if query.message else None
+                    user_search_states[(chat_id, user_id)] = "waiting_group_search"
+                    text = "🔍 **Guruh qidirish**\n\nGuruh username'ini kiriting (masalan: @groupname yoki groupname):"
+                    if query.message:
+                        await query.edit_message_text(text, parse_mode='Markdown')
+                else:
+                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+                    
+            elif query.data == "search_back":
+                if await self.is_subscribed(context, user_id):
+                    chat_id = query.message.chat.id if query.message else None
+                    user_search_states.pop((chat_id, user_id), None)
+                    text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
+                    keyboard = [
+                        [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
+                        [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
+                        [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")],
+                        [InlineKeyboardButton("🔍 Izlash", callback_data="search_menu")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    if query.message:
+                        await query.edit_message_text(text, reply_markup=reply_markup)
+                else:
+                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
             
             await query.answer()
             
         except Exception as e:
             logger.error(f"Error in button handler: {e}")
             await query.answer("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
+    
+    async def show_search_menu(self, query):
+        """Show search menu with options"""
+        text = "🔍 **Izlash menyusi**\n\nQaysi turdagi ID'ni izlashni xohlaysiz?"
+        keyboard = [
+            [InlineKeyboardButton("📺 Kanal izlash", callback_data="search_channel")],
+            [InlineKeyboardButton("👥 Guruh izlash", callback_data="search_group")],
+            [InlineKeyboardButton("⬅️ Orqaga", callback_data="search_back")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if query.message:
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    async def handle_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle text messages for search functionality"""
+        if not update.effective_user or not update.message:
+            return
+            
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        text = update.message.text
+        
+        # Skip if we don't have a valid chat_id
+        if not chat_id:
+            return
+        
+        # Check if user is subscribed before processing search
+        if not await self.is_subscribed(context, user_id):
+            return
+        
+        # Check if user is in a search state
+        if (chat_id, user_id) in user_search_states:
+            search_state = user_search_states[(chat_id, user_id)]
+            
+            if search_state == "waiting_channel_search":
+                await self.search_channel(update, context, text)
+            elif search_state == "waiting_group_search":
+                await self.search_group(update, context, text)
+                
+    async def search_channel(self, update, context, channel_name):
+        """Search for channel by username"""
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        
+        # Clean the channel name
+        if channel_name.startswith('@'):
+            channel_name = channel_name[1:]
+        
+        try:
+            # Try to get channel info
+            channel = await context.bot.get_chat(f"@{channel_name}")
+            
+            # Clear search state only on success
+            user_search_states.pop((chat_id, user_id), None)
+            
+            # Use proper Markdown escaping
+            title = escape_markdown(channel.title, version=2) if channel.title else "N/A"
+            username = escape_markdown(channel.username, version=2) if channel.username else "N/A"
+            channel_id = escape_markdown(str(channel.id), version=2)
+            channel_type = escape_markdown(channel.type, version=2)
+            
+            text = f"✅ **Kanal topildi\!**\n\n"
+            text += f"📺 **Nomi:** {title}\n"
+            text += f"🆔 **Username:** @{username}\n" if channel.username else ""
+            text += f"🆔 **ID:** `{channel_id}`\n"
+            text += f"👥 **Turi:** {channel_type}\n"
+            
+            if channel.description:
+                desc = escape_markdown(channel.description[:100], version=2)
+                text += f"📝 **Tavsif:** {desc}\.\.\."
+            
+        except Exception as e:
+            logger.error(f"Error searching channel @{channel_name}: {e}")
+            clean_channel_name = escape_markdown(channel_name, version=2)
+            text = f"❌ **Kanal topilmadi\!**\n\n@{clean_channel_name} kanal topilmadi yoki bot unga kirish huquqiga ega emas\.\n\n💡 **Maslahatlar:**\n\u2022 Kanal username'i to'g'ri yozilganligini tekshiring\n\u2022 Kanal ochiq \(public\) bo'lishi kerak\n\u2022 Kanal mavjudligini tekshiring"
+            
+        keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="search_menu")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
+    
+    async def search_group(self, update, context, group_name):
+        """Search for group by username"""
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        
+        # Clean the group name
+        if group_name.startswith('@'):
+            group_name = group_name[1:]
+        
+        try:
+            # Try to get group info
+            group = await context.bot.get_chat(f"@{group_name}")
+            
+            # Clear search state only on success
+            user_search_states.pop((chat_id, user_id), None)
+            
+            # Use proper Markdown escaping
+            title = escape_markdown(group.title, version=2) if group.title else "N/A"
+            username = escape_markdown(group.username, version=2) if group.username else "N/A"
+            group_id = escape_markdown(str(group.id), version=2)
+            group_type = escape_markdown(group.type, version=2)
+            
+            text = f"✅ **Guruh topildi\!**\n\n"
+            text += f"👥 **Nomi:** {title}\n"
+            text += f"🆔 **Username:** @{username}\n" if group.username else ""
+            text += f"🆔 **ID:** `{group_id}`\n"
+            text += f"👥 **Turi:** {group_type}\n"
+            
+            if group.description:
+                desc = escape_markdown(group.description[:100], version=2)
+                text += f"📝 **Tavsif:** {desc}\.\.\."
+            
+        except Exception as e:
+            logger.error(f"Error searching group @{group_name}: {e}")
+            clean_group_name = escape_markdown(group_name, version=2)
+            text = f"❌ **Guruh topilmadi\!**\n\n@{clean_group_name} guruh topilmadi yoki bot unga kirish huquqiga ega emas\.\n\n💡 **Maslahatlar:**\n\u2022 Guruh username'i to'g'ri yozilganligini tekshiring\n\u2022 Guruh ochiq \(public\) bo'lishi kerak\n\u2022 Guruh mavjudligini tekshiring"
+            
+        keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="search_menu")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
     
     def run(self):
         """Run the bot using polling"""
