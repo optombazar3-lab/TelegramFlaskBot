@@ -58,9 +58,8 @@ class TelegramBot:
             return member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
         except Exception as e:
             logger.error(f"Error checking subscription for channel {CHANNEL_ID}: {e}")
-            # For development/testing, return True if channel access fails
-            # In production, you might want to return False
-            return True
+            # Return False when we can't check - user needs to subscribe
+            return False
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
@@ -91,6 +90,12 @@ class TelegramBot:
         if not update.message:
             return
             
+        # Check if we can access the channel
+        if not CHANNEL_ID:
+            text = "⚠️ CHANNEL_ID sozlanmagan. Admin bilan bog'laning."
+            await update.message.reply_text(text)
+            return
+            
         text = "⚠️ Botdan foydalanish uchun quyidagi kanalga obuna bo'ling."
         
         # Create subscription button only if we have a valid channel URL
@@ -101,6 +106,10 @@ class TelegramBot:
             # Convert @username to proper URL
             channel_url = f"https://t.me/{CHANNEL_URL[1:]}"
             keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=channel_url)])
+        else:
+            # No valid URL provided, show channel ID info
+            text += f"\n\n🆔 Kanal: `{CHANNEL_ID}`"
+        
         keyboard.append([InlineKeyboardButton("🔄 Tekshirish", callback_data="check_subscription")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -109,14 +118,15 @@ class TelegramBot:
                 await update.message.reply_photo(
                     photo=WARNING_IMAGE_URL,
                     caption=text,
-                    reply_markup=reply_markup
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
                 )
             else:
-                await update.message.reply_text(text, reply_markup=reply_markup)
+                await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
         except Exception as e:
             logger.error(f"Error sending subscription message: {e}")
             # Fallback to simple text message without image
-            await update.message.reply_text(text, reply_markup=reply_markup)
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def show_subscribed_message(self, update):
         """Show message for subscribed users"""
