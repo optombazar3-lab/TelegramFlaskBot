@@ -51,10 +51,15 @@ class TelegramBot:
             return True
             
         try:
+            logger.info(f"Checking subscription for user {user_id} in channel {CHANNEL_ID}")
             member = await context.bot.get_chat_member(CHANNEL_ID, user_id)
-            return member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+            logger.info(f"User {user_id} status in channel: {member.status}")
+            is_member = member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+            logger.info(f"User {user_id} subscription check result: {is_member}")
+            return is_member
         except Exception as e:
-            logger.error(f"Error checking subscription for channel {CHANNEL_ID}: {e}")
+            logger.error(f"Error checking subscription for user {user_id} in channel {CHANNEL_ID}: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
             # For development/testing, return False so users see the subscription prompt
             # In production with proper setup, this should return False
             return False
