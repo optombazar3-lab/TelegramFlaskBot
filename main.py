@@ -18,9 +18,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress verbose loggers to prevent token leakage
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+
 # Configuration from environment variables
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
+CHANNEL_URL = os.getenv('CHANNEL_URL')  # Public channel URL for subscription button
 WARNING_IMAGE_URL = os.getenv('WARNING_IMAGE_URL')
 
 # User counter (in production, use a database)
@@ -82,13 +87,11 @@ class TelegramBot:
             
         text = "⚠️ Botdan foydalanish uchun quyidagi kanalga obuna bo'ling."
         
-        # Create channel URL properly
-        channel_url = f"https://t.me/{CHANNEL_ID[4:]}" if CHANNEL_ID and CHANNEL_ID.startswith('-100') else f"https://t.me/{CHANNEL_ID}"
-        
-        keyboard = [
-            [InlineKeyboardButton("✅ Obuna bo'lish", url=channel_url)],
-            [InlineKeyboardButton("🔄 Tekshirish", callback_data="check_subscription")]
-        ]
+        # Create subscription button only if we have a public channel URL
+        keyboard = []
+        if CHANNEL_URL:
+            keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=CHANNEL_URL)])
+        keyboard.append([InlineKeyboardButton("🔄 Tekshirish", callback_data="check_subscription")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         if WARNING_IMAGE_URL and WARNING_IMAGE_URL != "https://example.com/warning.png":
@@ -200,29 +203,18 @@ class TelegramBot:
             else:
                 text = "❌ Siz hali kanalga obuna bo'lmagansiz. Iltimos, avval kanalga obuna bo'ling."
                 
-                # Create channel URL properly
-                channel_url = f"https://t.me/{CHANNEL_ID[4:]}" if CHANNEL_ID and CHANNEL_ID.startswith('-100') else f"https://t.me/{CHANNEL_ID or ''}"
-                
-                keyboard = [
-                    [InlineKeyboardButton("✅ Obuna bo'lish", url=channel_url)],
-                    [InlineKeyboardButton("🔄 Tekshirish", callback_data="check_subscription")]
-                ]
+                # Create subscription button only if we have a public channel URL
+                keyboard = []
+                if CHANNEL_URL:
+                    keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=CHANNEL_URL)])
+                keyboard.append([InlineKeyboardButton("🔄 Tekshirish", callback_data="check_subscription")])
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 await query.edit_message_text(text, reply_markup=reply_markup)
     
-    async def run(self):
-        """Run the bot"""
-        if not self.application.updater:
-            logger.error("Bot updater not initialized")
-            return
-            
-        await self.application.initialize()
-        await self.application.start()
-        await self.application.updater.start_polling()
-        
-        # Keep running
-        await asyncio.Event().wait()
+    def run(self):
+        """Run the bot using polling"""
+        self.application.run_polling()
 
 # Flask app for Render.com deployment
 app = Flask(__name__)
@@ -245,7 +237,7 @@ def run_flask():
 def run_bot():
     """Run Telegram bot"""
     bot = TelegramBot()
-    asyncio.run(bot.run())
+    bot.run()
 
 if __name__ == '__main__':
     # Check if required environment variables are set
