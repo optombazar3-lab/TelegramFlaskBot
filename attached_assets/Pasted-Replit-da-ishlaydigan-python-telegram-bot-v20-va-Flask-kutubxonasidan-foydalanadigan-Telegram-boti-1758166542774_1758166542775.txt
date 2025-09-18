@@ -1,0 +1,48 @@
+Replit'da ishlaydigan, python-telegram-bot v20+ va Flask kutubxonasidan foydalanadigan Telegram botini yarating. Loyiha Render.com platformasiga joylashtirishga mos bo'lsin. Botning vazifasi foydalanuvchilar, guruhlar va kanallarning ID'larini ko'rsatishdan iborat. Bot quyidagi talablarga javob bersin:
+
+**1. Funksional talablar:**
+- Bot **obuna tekshiruvi** funksiyasiga ega bo'lsin. Ya'ni, foydalanuvchi botdan foydalanishdan oldin, belgilangan kanalga obuna bo'lishi shart. Obuna holati `bot.get_chat_member(chat_id, user_id)` metodi orqali tekshirilsin.
+- **`python-dotenv`** kutubxonasi orqali `BOT_TOKEN`, `CHANNEL_ID` va `WARNING_IMAGE_URL` o'zgaruvchilari `.env` faylidan o'qib olinsin.
+- Loyiha **Render.com** platformasi uchun mo'ljallanganligi sababli, Flask asosida oddiy web server ishga tushirilsin. Bu server botni doimiy ishlashini ta'minlaydi va Render'ning "Web Service" xususiyatiga mos keladi.
+
+**2. Buyruqlar:**
+- `/start`: Foydalanuvchi kanalga obuna bo'lmagan bo'lsa, uni obuna bo'lishga undaydigan xabar yuborilsin. Obuna bo'lgan bo'lsa, botning asosiy buyruqlari haqida ma'lumot beruvchi xabar yuborilsin.
+- `/check_subscription`: Obuna holatini qayta tekshirish uchun ishlatiladigan buyruq.
+- `/user_id`: Foydalanuvchining ID'sini ko'rsatadi.
+- `/chat_id`: Hozirgi guruh yoki kanalning ID'sini ko'rsatadi.
+- `/channel_id`: Hozirgi kanalning ID'sini ko'rsatadi.
+
+**3. Xabar mazmuni va vizual xususiyatlar (o'zbek tilida):**
+- **Obuna bo'lmagan holat:**
+  - Xabar: "⚠️ Botdan foydalanish uchun quyidagi kanalga obuna bo'ling."
+  - Inline tugmalar:
+    - **"✅ Obuna bo'lish"** tugmasi: kanalga o'tish uchun link.
+    - **"🔄 Tekshirish"** tugmasi: `/check_subscription` buyrug'ini ishga tushiradi.
+- **Obuna bo'lgan holat:**
+  - Xabar: "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
+  - Ostida barcha mavjud buyruqlar ro'yxati berilsin.
+- **`start` buyrug'idagi birinchi xabar:**
+  - Xabar: "👋 Salom, botimizga xush kelibsiz! Siz botdagi N-foydalanuvchi bo'ldingiz. 💬 Bu bot orqali foydalanuvchi, guruh va kanallarning ID'sini olish imkoniyatiga ega bo'lasiz. ⭐ Botga start tugmasini bosib, ish faoliyatini boshlang."
+- **ID xabarlari:**
+  - `/user_id` uchun: "Foydalanuvchi ID: `[ID raqami]`"
+  - `/chat_id` uchun: "Guruh/Kanal ID: `[ID raqami]`"
+  - `/channel_id` uchun: "Kanal ID: `[ID raqami]`"
+
+**4. Texnik xususiyatlar:**
+- Barcha xabarlar **o'zbek tilida** bo'lsin.
+- Kod to'liq, izohli va tushunarli bo'lsin.
+- Loyiha asosiy qismi bot logikasini o'z ichiga olsin.
+- Loyihani doimiy ishlashi uchun, `Flask` dan foydalanib oddiy web server yaratilsin. Web server `GET` so'roviga "Bot is running" yoki shunga o'xshash xabarni qaytarsin.
+- Render.com'da ishlatish uchun `requirements.txt` va `.env` fayllari yaratilsin.
+- **`requirements.txt`** fayli:
+python-telegram-bot==20.6
+python-dotenv
+flask
+
+- **`.env`** fayli:
+BOT_TOKEN=YOUR_BOT_TOKEN_HERE
+CHANNEL_ID=-1001234567890
+WARNING_IMAGE_URL=https://example.com/warning.png
+
+- Bot har bir ID buyrug'i so'ralganda ID'ni ko'rsatishi shart.
+- Loyiha kodi **Render** platformasi uchun moslangan bo'lsin.
