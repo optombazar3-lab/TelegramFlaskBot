@@ -144,17 +144,16 @@ class TelegramBot:
             await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def show_subscribed_message(self, update):
-        """Show message for subscribed users with inline buttons"""
+        """Show message for subscribed users with search options only"""
         if not update.message:
             return
             
-        text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
+        text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin.\n\n🔍 Qidirish turini tanlang:"
         
         keyboard = [
-            [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
-            [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
-            [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")],
-            [InlineKeyboardButton("🔍 Izlash", callback_data="search_menu")]
+            [InlineKeyboardButton("👤 Foydalanuvchi qidirish", callback_data="search_user")],
+            [InlineKeyboardButton("📺 Kanal qidirish", callback_data="search_channel")],
+            [InlineKeyboardButton("👥 Guruh qidirish", callback_data="search_group")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -183,12 +182,11 @@ class TelegramBot:
         try:
             if query.data == "check_subscription":
                 if await self.is_subscribed(context, user_id):
-                    text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
+                    text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin.\n\n🔍 Qidirish turini tanlang:"
                     keyboard = [
-                        [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
-                        [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
-                        [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")],
-                        [InlineKeyboardButton("🔍 Izlash", callback_data="search_menu")]
+                        [InlineKeyboardButton("👤 Foydalanuvchi qidirish", callback_data="search_user")],
+                        [InlineKeyboardButton("📺 Kanal qidirish", callback_data="search_channel")],
+                        [InlineKeyboardButton("👥 Guruh qidirish", callback_data="search_group")]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
@@ -210,52 +208,13 @@ class TelegramBot:
                 else:
                     await query.answer("❌ Siz hali kanalga obuna bo'lmagansiz. Iltimos, avval kanalga obuna bo'ling.", show_alert=True)
                     
-            elif query.data == "get_user_id":
+            elif query.data == "search_user":
                 if await self.is_subscribed(context, user_id):
-                    text = f"Foydalanuvchi ID: `{user_id}`"
+                    chat_id = query.message.chat.id if query.message else None
+                    user_search_states[(chat_id, user_id)] = "waiting_user_search"
+                    text = "👤 **Foydalanuvchi qidirish**\n\nFoydalanuvchi username'ini kiriting (masalan: @username yoki username):"
                     if query.message:
-                        await context.bot.send_message(
-                            chat_id=query.message.chat_id,
-                            text=text,
-                            parse_mode='Markdown'
-                        )
-                else:
-                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
-                    
-            elif query.data == "get_chat_id":
-                if await self.is_subscribed(context, user_id):
-                    chat_id = update.effective_chat.id if update.effective_chat else "N/A"
-                    text = f"Guruh/Kanal ID: `{chat_id}`"
-                    if query.message:
-                        await context.bot.send_message(
-                            chat_id=query.message.chat_id,
-                            text=text,
-                            parse_mode='Markdown'
-                        )
-                else:
-                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
-                    
-            elif query.data == "get_channel_id":
-                if await self.is_subscribed(context, user_id):
-                    # Show current chat ID if it's a channel/group, or required channel ID if private
-                    chat_id = update.effective_chat.id if update.effective_chat else None
-                    if chat_id and chat_id < 0:  # Group or channel
-                        text = f"Kanal ID: `{chat_id}`"
-                    else:  # Private chat
-                        text = f"Kanal ID: `{CHANNEL_ID or 'Sozlanmagan'}`"
-                    
-                    if query.message:
-                        await context.bot.send_message(
-                            chat_id=query.message.chat_id,
-                            text=text,
-                            parse_mode='Markdown'
-                        )
-                else:
-                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
-                    
-            elif query.data == "search_menu":
-                if await self.is_subscribed(context, user_id):
-                    await self.show_search_menu(query)
+                        await query.edit_message_text(text, parse_mode='Markdown')
                 else:
                     await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
                     
@@ -283,12 +242,11 @@ class TelegramBot:
                 if await self.is_subscribed(context, user_id):
                     chat_id = query.message.chat.id if query.message else None
                     user_search_states.pop((chat_id, user_id), None)
-                    text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
+                    text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin.\n\n🔍 Qidirish turini tanlang:"
                     keyboard = [
-                        [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
-                        [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
-                        [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")],
-                        [InlineKeyboardButton("🔍 Izlash", callback_data="search_menu")]
+                        [InlineKeyboardButton("👤 Foydalanuvchi qidirish", callback_data="search_user")],
+                        [InlineKeyboardButton("📺 Kanal qidirish", callback_data="search_channel")],
+                        [InlineKeyboardButton("👥 Guruh qidirish", callback_data="search_group")]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     if query.message:
@@ -302,17 +260,6 @@ class TelegramBot:
             logger.error(f"Error in button handler: {e}")
             await query.answer("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
     
-    async def show_search_menu(self, query):
-        """Show search menu with options"""
-        text = "🔍 **Izlash menyusi**\n\nQaysi turdagi ID'ni izlashni xohlaysiz?"
-        keyboard = [
-            [InlineKeyboardButton("📺 Kanal izlash", callback_data="search_channel")],
-            [InlineKeyboardButton("👥 Guruh izlash", callback_data="search_group")],
-            [InlineKeyboardButton("⬅️ Orqaga", callback_data="search_back")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        if query.message:
-            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def handle_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages for search functionality"""
@@ -335,11 +282,51 @@ class TelegramBot:
         if (chat_id, user_id) in user_search_states:
             search_state = user_search_states[(chat_id, user_id)]
             
-            if search_state == "waiting_channel_search":
+            if search_state == "waiting_user_search":
+                await self.search_user(update, context, text)
+            elif search_state == "waiting_channel_search":
                 await self.search_channel(update, context, text)
             elif search_state == "waiting_group_search":
                 await self.search_group(update, context, text)
                 
+    async def search_user(self, update, context, username):
+        """Search for user by username"""
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        
+        # Clean the username
+        if username.startswith('@'):
+            username = username[1:]
+        
+        try:
+            # Try to get user info by searching for them
+            # Note: Telegram Bot API doesn't allow searching for users directly by username
+            # We can only get user info if we have their ID or if they interact with the bot
+            # So we'll provide a helpful message about this limitation
+            
+            # Clear search state
+            user_search_states.pop((chat_id, user_id), None)
+            
+            # Inform user about the limitation
+            clean_username = escape_markdown(username, version=2)
+            text = f"⚠️ **Foydalanuvchi qidirish cheklovi**\n\n"
+            text += f"Afsuski, Telegram Bot API orqali @{clean_username} foydalanuvchisini username bo\'yicha qidirish mumkin emas\.\n\n"
+            text += f"**Foydalanuvchi ID\-sini olish usullari:**\n"
+            text += f"• Foydalanuvchi botga yozishi va /start bosishi kerak\n"
+            text += f"• Yoki foydalanuvchini guruhlarda mention qilib, bot orqali ID\-sini olish mumkin\n\n"
+            text += f"**Maslahat:** Kanal yoki guruh qidirish funksiyasidan foydalaning\!"
+            
+        except Exception as e:
+            logger.error(f"Error in user search: {e}")
+            user_search_states.pop((chat_id, user_id), None)
+            clean_username = escape_markdown(username, version=2)
+            text = f"❌ **Xatolik yuz berdi\!**\n\n@{clean_username} foydalanuvchisini qidirishda xatolik yuz berdi\."
+            
+        keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="search_back")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
+    
     async def search_channel(self, update, context, channel_name):
         """Search for channel by username"""
         user_id = update.effective_user.id
@@ -377,7 +364,7 @@ class TelegramBot:
             clean_channel_name = escape_markdown(channel_name, version=2)
             text = f"❌ **Kanal topilmadi\!**\n\n@{clean_channel_name} kanal topilmadi yoki bot unga kirish huquqiga ega emas\.\n\n💡 **Maslahatlar:**\n\u2022 Kanal username'i to'g'ri yozilganligini tekshiring\n\u2022 Kanal ochiq \(public\) bo'lishi kerak\n\u2022 Kanal mavjudligini tekshiring"
             
-        keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="search_menu")]]
+        keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="search_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
@@ -419,7 +406,7 @@ class TelegramBot:
             clean_group_name = escape_markdown(group_name, version=2)
             text = f"❌ **Guruh topilmadi\!**\n\n@{clean_group_name} guruh topilmadi yoki bot unga kirish huquqiga ega emas\.\n\n💡 **Maslahatlar:**\n\u2022 Guruh username'i to'g'ri yozilganligini tekshiring\n\u2022 Guruh ochiq \(public\) bo'lishi kerak\n\u2022 Guruh mavjudligini tekshiring"
             
-        keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="search_menu")]]
+        keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="search_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
