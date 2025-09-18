@@ -1,0 +1,46 @@
+Replit'da ishlaydigan va python-telegram-bot v20+ kutubxonasidan foydalanadigan Telegram botini yarating. Botning vazifasi foydalanuvchi, guruh va kanallarning ID'larini ko'rsatishdan iborat.
+
+**1. Funksional talablar:**
+- Bot **obuna tekshiruvi** funksiyasiga ega bo'lsin. Ya'ni, foydalanuvchi botdan foydalanishdan oldin, belgilangan kanalga obuna bo'lishi shart. Obuna holati `bot.get_chat_member(chat_id, user_id)` metodi orqali tekshirilsin.
+- **`python-dotenv`** kutubxonasi orqali `BOT_TOKEN`, `CHANNEL_ID` va `WARNING_IMAGE_URL` o'zgaruvchilari `.env` faylidan o'qib olinsin.
+- Loyiha Replit'da ishlashi uchun oddiy web server funksiyasidan foydalanilsin, bu botning doimiy ishlashini ta'minlaydi.
+
+**2. Buyruqlar va interfeys:**
+- **`/start` buyrug'i:**
+  - Foydalanuvchi kanalga obuna bo'lmagan bo'lsa, quyidagi xabarni yuborsin:
+    - **Matn:** "⚠️ Botdan foydalanish uchun quyidagi kanalga obuna bo'ling."
+    - **Rasm:** `WARNING_IMAGE_URL` dagi rasm.
+    - **Inline klaviatura:** Ikkita tugma bo'lsin.
+      - ✅ **Obuna bo'lish** tugmasi: kanalga o'tish uchun link.
+      - 🔄 **Tekshirish** tugmasi: `callback_data='check_subscription'`.
+  - Foydalanuvchi kanalga obuna bo'lgan bo'lsa, quyidagi xabarni yuborsin:
+    - **Matn:** "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
+    - **Inline klaviatura:** ID olish uchun asosiy funksiyalarni o'z ichiga olgan tugmalar bo'lsin.
+      - 👤 **Foydalanuvchi ID** tugmasi: `callback_data='get_user_id'`
+      - 👥 **Guruh/Kanal ID** tugmasi: `callback_data='get_chat_id'`
+      - 📜 **Kanal ID** tugmasi: `callback_data='get_channel_id'`
+
+**3. Callback'lar funksionalligi:**
+- `check_subscription`: Obuna holatini qayta tekshiradi va natijaga qarab tegishli xabarni yuboradi.
+- `get_user_id`: Foydalanuvchining ID'sini yuboradi. Matn: "Foydalanuvchi ID: `[ID raqami]`".
+- `get_chat_id`: Hozirgi chat (guruh/kanal) ID'sini yuboradi. Matn: "Guruh/Kanal ID: `[ID raqami]`".
+- `get_channel_id`: Hozirgi kanalning ID'sini yuboradi. Matn: "Kanal ID: `[ID raqami]`".
+
+**4. Xabar mazmuni (o'zbek tilida):**
+- **Boshlang'ich kirish xabari:**
+  - "👋 Salom, **[Foydalanuvchi ismi]** botimizga xush kelibsiz! Siz botdagi **[tartib raqami]**-foydalanuvchi bo'ldingiz. 💬 Bu bot orqali foydalanuvchi, guruh va kanallarning ID'sini olish imkoniyatiga ega bo'lasiz. ⭐ Botga start tugmasini bosib, ish faoliyatini boshlang."
+- Barcha xabarlar va tugmalar **o'zbek tilida** bo'lsin.
+
+**5. Texnik xususiyatlar:**
+- Kod to'liq, izohli va tushunarli bo'lsin.
+- Replit'da ishlash uchun mos bo'lsin.
+- **`requirements.txt`** fayli:
+python-telegram-bot==20.6
+python-dotenv
+
+- **`.env`** fayli:
+BOT_TOKEN=YOUR_BOT_TOKEN_HERE
+CHANNEL_ID=-1001234567890
+WARNING_IMAGE_URL=https://example.com/warning.png
+
+- Bot har bir ID buyrug'i so'ralganda ID'ni ko'rsatishi shart.

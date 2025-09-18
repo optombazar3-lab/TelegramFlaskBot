@@ -25,7 +25,7 @@ logging.getLogger("telegram").setLevel(logging.WARNING)
 # Configuration from environment variables
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
-CHANNEL_URL = os.getenv('CHANNEL_URL')  # Public channel URL for subscription button
+CHANNEL_URL = os.getenv('CHANNEL_URL')
 WARNING_IMAGE_URL = os.getenv('WARNING_IMAGE_URL')
 
 # User counter (in production, use a database)
@@ -47,7 +47,7 @@ class TelegramBot:
     async def is_subscribed(self, context, user_id):
         """Check if user is subscribed to the required channel"""
         if not CHANNEL_ID:
-            logger.warning("CHANNEL_ID not configured - allowing access")
+            logger.warning("CHANNEL_ID not configured - allowing access for testing")
             return True
             
         try:
@@ -55,7 +55,8 @@ class TelegramBot:
             return member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
         except Exception as e:
             logger.error(f"Error checking subscription for channel {CHANNEL_ID}: {e}")
-            # Return False when we can't check - user needs to subscribe
+            # For development/testing, return False so users see the subscription prompt
+            # In production with proper setup, this should return False
             return False
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -65,16 +66,18 @@ class TelegramBot:
             
         global user_count
         user_id = update.effective_user.id
+        user_name = update.effective_user.first_name or "Foydalanuvchi"
         user_count += 1
         
-        # Welcome message
+        # Welcome message with user name and number
         welcome_text = (
-            f"👋 Salom, botimizga xush kelibsiz! Siz botdagi {user_count}-foydalanuvchi bo'ldingiz. "
+            f"👋 Salom, **{user_name}** botimizga xush kelibsiz! "
+            f"Siz botdagi **{user_count}**-foydalanuvchi bo'ldingiz. "
             f"💬 Bu bot orqali foydalanuvchi, guruh va kanallarning ID'sini olish imkoniyatiga ega bo'lasiz. "
             f"⭐ Botga start tugmasini bosib, ish faoliyatini boshlang."
         )
         
-        await update.message.reply_text(welcome_text)
+        await update.message.reply_text(welcome_text, parse_mode='Markdown')
         
         # Check subscription
         if await self.is_subscribed(context, user_id):
@@ -87,25 +90,30 @@ class TelegramBot:
         if not update.message:
             return
             
-        # Check if we can access the channel
-        if not CHANNEL_ID:
-            text = "⚠️ CHANNEL_ID sozlanmagan. Admin bilan bog'laning."
-            await update.message.reply_text(text)
-            return
-            
         text = "⚠️ Botdan foydalanish uchun quyidagi kanalga obuna bo'ling."
         
-        # Create subscription button only if we have a valid channel URL
+        # Create subscription button URL
+        subscribe_url = None
+        
+        # Priority 1: Use CHANNEL_URL if provided
+        if CHANNEL_URL:
+            if CHANNEL_URL.startswith('https://') or CHANNEL_URL.startswith('http://'):
+                subscribe_url = CHANNEL_URL
+            elif CHANNEL_URL.startswith('@'):
+                subscribe_url = f"https://t.me/{CHANNEL_URL[1:]}"
+        
+        # Priority 2: Derive URL from CHANNEL_ID if it starts with @
+        elif CHANNEL_ID and CHANNEL_ID.startswith('@'):
+            subscribe_url = f"https://t.me/{CHANNEL_ID[1:]}"
+        
+        # Priority 3: Show channel ID in message for numeric IDs
+        elif CHANNEL_ID:
+            text += f"\n\n🆔 Kanal ID: `{CHANNEL_ID}`\n📝 Admin bilan bog'laning yoki kanalning public username'ini so'rang."
+        
+        # Create keyboard
         keyboard = []
-        if CHANNEL_URL and (CHANNEL_URL.startswith('https://') or CHANNEL_URL.startswith('http://')):
-            keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=CHANNEL_URL)])
-        elif CHANNEL_URL and CHANNEL_URL.startswith('@'):
-            # Convert @username to proper URL
-            channel_url = f"https://t.me/{CHANNEL_URL[1:]}"
-            keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=channel_url)])
-        else:
-            # No valid URL provided, show channel ID info
-            text += f"\n\n🆔 Kanal: `{CHANNEL_ID}`"
+        if subscribe_url:
+            keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=subscribe_url)])
         
         keyboard.append([InlineKeyboardButton("🔄 Tekshirish", callback_data="check_subscription")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -122,7 +130,7 @@ class TelegramBot:
                 await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
         except Exception as e:
             logger.error(f"Error sending subscription message: {e}")
-            # Fallback to simple text message without image
+            # Fallback to simple text message
             await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def show_subscribed_message(self, update):
@@ -130,13 +138,12 @@ class TelegramBot:
         if not update.message:
             return
             
-        text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin.\n\n🆔 Quyidagi tugmalardan foydalaning:"
+        text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
         
         keyboard = [
-            [InlineKeyboardButton("👤 User ID", callback_data="get_user_id")],
-            [InlineKeyboardButton("💬 Chat ID", callback_data="get_chat_id")],
-            [InlineKeyboardButton("📺 Channel ID", callback_data="get_channel_id")],
-            [InlineKeyboardButton("🔄 Obuna tekshirish", callback_data="check_subscription")]
+            [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
+            [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
+            [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -154,7 +161,6 @@ class TelegramBot:
         else:
             await self.show_subscription_required(update)
     
-    
     async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle inline button callbacks"""
         if not update.callback_query or not update.callback_query.from_user:
@@ -163,84 +169,83 @@ class TelegramBot:
         query = update.callback_query
         user_id = query.from_user.id
         
-        # Check subscription for all actions
-        is_subscribed = await self.is_subscribed(context, user_id)
-        
-        if query.data == "check_subscription":
-            if is_subscribed:
-                text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin.\n\n🆔 Quyidagi tugmalardan foydalaning:"
-                keyboard = [
-                    [InlineKeyboardButton("👤 User ID", callback_data="get_user_id")],
-                    [InlineKeyboardButton("💬 Chat ID", callback_data="get_chat_id")],
-                    [InlineKeyboardButton("📺 Channel ID", callback_data="get_channel_id")],
-                    [InlineKeyboardButton("🔄 Obuna tekshirish", callback_data="check_subscription")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text, reply_markup=reply_markup)
-            else:
-                text = "❌ Siz hali kanalga obuna bo'lmagansiz. Iltimos, avval kanalga obuna bo'ling."
-                
-                # Create subscription button only if we have a valid channel URL
-                keyboard = []
-                if CHANNEL_URL and (CHANNEL_URL.startswith('https://') or CHANNEL_URL.startswith('http://')):
-                    keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=CHANNEL_URL)])
-                elif CHANNEL_URL and CHANNEL_URL.startswith('@'):
-                    # Convert @username to proper URL
-                    channel_url = f"https://t.me/{CHANNEL_URL[1:]}"
-                    keyboard.append([InlineKeyboardButton("✅ Obuna bo'lish", url=channel_url)])
-                keyboard.append([InlineKeyboardButton("🔄 Tekshirish", callback_data="check_subscription")])
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await query.edit_message_text(text, reply_markup=reply_markup)
-                
-        elif query.data == "get_user_id":
-            if is_subscribed:
-                text = f"👤 Foydalanuvchi ID: `{user_id}`"
-                keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_menu")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-            else:
-                await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
-                
-        elif query.data == "get_chat_id":
-            if is_subscribed:
-                chat_id = update.effective_chat.id if update.effective_chat else "N/A"
-                text = f"💬 Guruh/Kanal ID: `{chat_id}`"
-                keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_menu")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-            else:
-                await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
-                
-        elif query.data == "get_channel_id":
-            if is_subscribed:
-                # Show the required channel ID or current chat ID if in a channel
-                chat_id = update.effective_chat.id if update.effective_chat else None
-                if chat_id and chat_id < 0:  # Group or channel
-                    text = f"📺 Hozirgi Kanal ID: `{chat_id}`"
-                else:  # Private chat
-                    text = f"📺 Majburiy Kanal ID: `{CHANNEL_ID or 'Not configured'}`"
-                keyboard = [[InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_menu")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-            else:
-                await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
-                
-        elif query.data == "back_to_menu":
-            if is_subscribed:
-                text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin.\n\n🆔 Quyidagi tugmalardan foydalaning:"
-                keyboard = [
-                    [InlineKeyboardButton("👤 User ID", callback_data="get_user_id")],
-                    [InlineKeyboardButton("💬 Chat ID", callback_data="get_chat_id")],
-                    [InlineKeyboardButton("📺 Channel ID", callback_data="get_channel_id")],
-                    [InlineKeyboardButton("🔄 Obuna tekshirish", callback_data="check_subscription")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text, reply_markup=reply_markup)
-            else:
-                await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
-        
-        await query.answer()
+        try:
+            if query.data == "check_subscription":
+                if await self.is_subscribed(context, user_id):
+                    text = "✅ Obuna bo'lingan! Siz botdan foydalanishingiz mumkin."
+                    keyboard = [
+                        [InlineKeyboardButton("👤 Foydalanuvchi ID", callback_data="get_user_id")],
+                        [InlineKeyboardButton("👥 Guruh/Kanal ID", callback_data="get_chat_id")],
+                        [InlineKeyboardButton("📜 Kanal ID", callback_data="get_channel_id")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    # Try to edit message, if it fails, send new message
+                    try:
+                        await query.edit_message_text(text, reply_markup=reply_markup)
+                    except:
+                        # If editing fails (maybe it was a photo message), delete and send new
+                        if query.message:
+                            try:
+                                await query.message.delete()
+                            except:
+                                pass
+                            await context.bot.send_message(
+                                chat_id=query.message.chat_id,
+                                text=text,
+                                reply_markup=reply_markup
+                            )
+                else:
+                    await query.answer("❌ Siz hali kanalga obuna bo'lmagansiz. Iltimos, avval kanalga obuna bo'ling.", show_alert=True)
+                    
+            elif query.data == "get_user_id":
+                if await self.is_subscribed(context, user_id):
+                    text = f"Foydalanuvchi ID: `{user_id}`"
+                    if query.message:
+                        await context.bot.send_message(
+                            chat_id=query.message.chat_id,
+                            text=text,
+                            parse_mode='Markdown'
+                        )
+                else:
+                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+                    
+            elif query.data == "get_chat_id":
+                if await self.is_subscribed(context, user_id):
+                    chat_id = update.effective_chat.id if update.effective_chat else "N/A"
+                    text = f"Guruh/Kanal ID: `{chat_id}`"
+                    if query.message:
+                        await context.bot.send_message(
+                            chat_id=query.message.chat_id,
+                            text=text,
+                            parse_mode='Markdown'
+                        )
+                else:
+                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+                    
+            elif query.data == "get_channel_id":
+                if await self.is_subscribed(context, user_id):
+                    # Show current chat ID if it's a channel/group, or required channel ID if private
+                    chat_id = update.effective_chat.id if update.effective_chat else None
+                    if chat_id and chat_id < 0:  # Group or channel
+                        text = f"Kanal ID: `{chat_id}`"
+                    else:  # Private chat
+                        text = f"Kanal ID: `{CHANNEL_ID or 'Sozlanmagan'}`"
+                    
+                    if query.message:
+                        await context.bot.send_message(
+                            chat_id=query.message.chat_id,
+                            text=text,
+                            parse_mode='Markdown'
+                        )
+                else:
+                    await query.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
+            
+            await query.answer()
+            
+        except Exception as e:
+            logger.error(f"Error in button handler: {e}")
+            await query.answer("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
     
     def run(self):
         """Run the bot using polling"""
@@ -276,8 +281,7 @@ if __name__ == '__main__':
         exit(1)
     
     if not CHANNEL_ID:
-        logger.error("CHANNEL_ID environment variable is not set")
-        exit(1)
+        logger.warning("CHANNEL_ID environment variable is not set - bot will allow all users for testing")
     
     logger.info("Starting Telegram bot and Flask server...")
     
